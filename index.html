@@ -22,20 +22,18 @@
       <div id="chatList"></div>
 
       <!-- Chat Creation Section -->
-    <button onclick="toggleChatCreation()">+ New Chat</button>
+      <button onclick="toggleChatCreation()">+ New Chat</button>
 
-    <!-- Chat Creation Dropdown -->
-    <div id="chatCreationDropdown" class="dropdown-container">
-
-    <input type="text" id="chatName" placeholder="Chat Name" required>
-  <select id="chatType" onchange="handleChatTypeChange()">
-    <option value="public">Public</option>
-    <option value="password">Password Protected</option>
-  </select>
-  <input type="password" id="chatPassword" placeholder="Password (if protected)" style="display: none;">
-  <button onclick="createChat()">Create Chat</button>
-</div>
-
+      <!-- Chat Creation Dropdown -->
+      <div id="chatCreationDropdown" class="dropdown-container">
+        <input type="text" id="chatName" placeholder="Chat Name" required>
+        <select id="chatType" onchange="handleChatTypeChange()">
+          <option value="public">Public</option>
+          <option value="password">Password Protected</option>
+        </select>
+        <input type="password" id="chatPassword" placeholder="Password (if protected)" style="display: none;">
+        <button onclick="createChat()">Create Chat</button>
+      </div>
 
       <!-- Open a specific chat -->
       <div id="chatWindow" style="display: none;">
@@ -48,6 +46,21 @@
     </div>
   </div>
 
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      databaseURL: "https://ponoschat-f204d-default-rtdb.europe-west1.firebasedatabase.app/"
+    };
+
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database(app);
+  </script>
+
+  <!-- App Script -->
   <script src="app.js"></script>
 </body>
 </html>
