@@ -1,4 +1,3 @@
-// Hashing function
 async function hashPassword(password) {
   const encoder = new TextEncoder();
   const data = encoder.encode(password);
@@ -7,7 +6,6 @@ async function hashPassword(password) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Login functionality
 async function login() {
   const username = document.getElementById('username').value;
   const password = document.getElementById('password').value;
@@ -19,11 +17,7 @@ async function login() {
     const adminPasswordHash = '2cf7b314740936e79c3139d7c1467cf0190037682aa1581f7e3d0dbecf537b38';
     const inputPasswordHash = await hashPassword(password);
 
-    if (username === 'admin' && inputPasswordHash === adminPasswordHash) {
-      localStorage.setItem('isAdmin', true);
-    } else {
-      localStorage.setItem('isAdmin', false);
-    }
+    localStorage.setItem('isAdmin', username === 'admin' && inputPasswordHash === adminPasswordHash);
 
     document.getElementById('loginSection').style.display = 'none';
     document.getElementById('chatSection').style.display = 'block';
@@ -35,25 +29,25 @@ async function login() {
   }
 }
 
-// Load chats from localStorage
 function loadChats() {
-  const chats = JSON.parse(localStorage.getItem('chats')) || [];
   const chatList = document.getElementById('chatList');
   chatList.innerHTML = '';
 
-  chats.forEach((chat, index) => {
-    const chatItem = document.createElement('div');
-    chatItem.className = `chat-item ${chat.type}`;
-    chatItem.innerHTML = `
-      <strong>${chat.name}</strong> (${chat.type}) 
-      <button onclick="openChat(${index})">Open</button>
-      ${chat.owner === localStorage.getItem('username') ? `<button onclick="deleteChat(${index})">Delete</button>` : ''}
-    `;
-    chatList.appendChild(chatItem);
+  firebase.database().ref('chats').once('value', snapshot => {
+    const chats = snapshot.val() || {};
+    Object.entries(chats).forEach(([key, chat]) => {
+      const chatItem = document.createElement('div');
+      chatItem.className = `chat-item ${chat.type}`;
+      chatItem.innerHTML = `
+        <strong>${chat.name}</strong> (${chat.type}) 
+        <button onclick="openChat('${key}')">Open</button>
+        ${chat.owner === localStorage.getItem('username') ? `<button onclick="deleteChat('${key}')">Delete</button>` : ''}
+      `;
+      chatList.appendChild(chatItem);
+    });
   });
 }
 
-// Display admin controls
 function displayAdminControls() {
   if (localStorage.getItem('isAdmin') === 'true') {
     const deleteAllButton = document.createElement('button');
@@ -63,127 +57,118 @@ function displayAdminControls() {
   }
 }
 
-// Delete all chats
 function deleteAllChats() {
   if (localStorage.getItem('isAdmin') === 'true') {
-    localStorage.removeItem('chats');
+    firebase.database().ref('chats').remove();
     loadChats();
   } else {
     alert('You do not have permission to delete all chats.');
   }
 }
 
-// Open a specific chat
-function openChat(index) {
-  const chats = JSON.parse(localStorage.getItem('chats')) || [];
-  const chat = chats[index];
+function openChat(chatId) {
+  firebase.database().ref(`chats/${chatId}`).once('value', snapshot => {
+    const chat = snapshot.val();
+    if (!chat) return;
 
-  if (chat.type === 'password') {
-    const password = prompt('Enter the chat password:');
-    if (password !== chat.password) {
-      alert('Incorrect password');
-      return;
+    if (chat.type === 'password') {
+      const input = prompt('Enter the chat password:');
+      if (input !== chat.password) {
+        alert('Incorrect password');
+        return;
+      }
     }
-  }
 
-  document.getElementById('chatWindow').style.display = 'block';
-  document.getElementById('currentChatName').innerText = chat.name;
-
-  loadMessages(index);
-}
-
-// Load messages for selected chat
-function loadMessages(chatIndex) {
-  const chats = JSON.parse(localStorage.getItem('chats')) || [];
-  const chat = chats[chatIndex];
-  const messages = chat.messages || [];
-  const messagesContainer = document.getElementById('messages');
-  messagesContainer.innerHTML = '';
-
-  messages.forEach(message => {
-    const messageElement = document.createElement('div');
-    messageElement.className = `message ${message.user === localStorage.getItem('username') ? 'user' : 'other'}`;
-    messageElement.innerText = `${message.user}: ${message.text}`;
-    messagesContainer.appendChild(messageElement);
+    document.getElementById('chatWindow').style.display = 'block';
+    document.getElementById('currentChatName').innerText = chat.name;
+    document.getElementById('chatWindow').setAttribute('data-chat-id', chatId);
+    loadMessages(chatId);
   });
 }
 
-// Send a message
+function loadMessages(chatId) {
+  const messagesContainer = document.getElementById('messages');
+  messagesContainer.innerHTML = '';
+
+  firebase.database().ref(`chats/${chatId}/messages`).on('value', snapshot => {
+    const messages = snapshot.val() || [];
+    messagesContainer.innerHTML = '';
+    messages.forEach(message => {
+      const messageElement = document.createElement('div');
+      messageElement.className = `message ${message.user === localStorage.getItem('username') ? 'user' : 'other'}`;
+      messageElement.innerText = `${message.user}: ${message.text}`;
+      messagesContainer.appendChild(messageElement);
+    });
+  });
+}
+
 function sendMessage() {
   const messageInput = document.getElementById('messageInput');
-  const messageText = messageInput.value;
+  const messageText = messageInput.value.trim();
+  if (!messageText) return;
 
-  if (messageText) {
-    const username = localStorage.getItem('username');
-    const chats = JSON.parse(localStorage.getItem('chats')) || [];
-    const currentChatName = document.getElementById('currentChatName').innerText;
-    const chatIndex = chats.findIndex(chat => chat.name === currentChatName);
+  const chatId = document.getElementById('chatWindow').getAttribute('data-chat-id');
+  const username = localStorage.getItem('username');
 
-    const newMessage = { user: username, text: messageText };
-    chats[chatIndex].messages = chats[chatIndex].messages || [];
-    chats[chatIndex].messages.push(newMessage);
-    localStorage.setItem('chats', JSON.stringify(chats));
+  firebase.database().ref(`chats/${chatId}/messages`).once('value', snapshot => {
+    const messages = snapshot.val() || [];
+    messages.push({ user: username, text: messageText });
 
-    loadMessages(chatIndex);
+    firebase.database().ref(`chats/${chatId}/messages`).set(messages);
     messageInput.value = '';
-  }
+  });
 }
 
-// Close current chat
 function closeChat() {
   document.getElementById('chatWindow').style.display = 'none';
+  document.getElementById('chatWindow').removeAttribute('data-chat-id');
 }
 
-// Create a new chat
 function createChat() {
-  const chatName = document.getElementById('chatName').value;
-  const chatType = document.getElementById('chatType').value;
-  const chatPassword = document.getElementById('chatPassword').value;
+  const name = document.getElementById('chatName').value;
+  const type = document.getElementById('chatType').value;
+  const password = document.getElementById('chatPassword').value;
 
-  if (!chatName) {
+  if (!name) {
     alert('Please enter a chat name.');
     return;
   }
 
-  const chats = JSON.parse(localStorage.getItem('chats')) || [];
-
-  if (chats.some(chat => chat.name === chatName)) {
-    alert('A chat with this name already exists.');
-    return;
-  }
-
   const newChat = {
-    name: chatName,
-    type: chatType,
-    password: chatType === 'password' ? chatPassword : '',
+    name,
+    type,
+    password: type === 'password' ? password : '',
     owner: localStorage.getItem('username'),
+    messages: []
   };
 
-  chats.push(newChat);
-  localStorage.setItem('chats', JSON.stringify(chats));
-
-  loadChats();
-  document.getElementById('chatName').value = '';
-  document.getElementById('chatPassword').value = '';
+  const chatsRef = firebase.database().ref('chats');
+  chatsRef.orderByChild('name').equalTo(name).once('value', snapshot => {
+    if (snapshot.exists()) {
+      alert('A chat with this name already exists.');
+    } else {
+      chatsRef.push(newChat);
+      loadChats();
+      document.getElementById('chatName').value = '';
+      document.getElementById('chatPassword').value = '';
+    }
+  });
 }
 
-// Delete a chat
-function deleteChat(index) {
-  const chats = JSON.parse(localStorage.getItem('chats')) || [];
-  const chat = chats[index];
-
-  if (chat.owner === localStorage.getItem('username')) {
-    chats.splice(index, 1);
-    localStorage.setItem('chats', JSON.stringify(chats));
-    loadChats();
-  } else {
-    alert('You are not the owner of this chat!');
-  }
+function deleteChat(chatId) {
+  firebase.database().ref(`chats/${chatId}`).once('value', snapshot => {
+    const chat = snapshot.val();
+    if (chat.owner === localStorage.getItem('username')) {
+      firebase.database().ref(`chats/${chatId}`).remove();
+      loadChats();
+    } else {
+      alert('You are not the owner of this chat!');
+    }
+  });
 }
 
 function toggleChatCreation() {
-  const dropdown = document.getElementById('chatCreationDropdown');
-  dropdown.classList.toggle('show');
+  document.getElementById('chatCreationDropdown').classList.toggle('show');
 }
 
 function handleChatTypeChange() {
@@ -192,42 +177,8 @@ function handleChatTypeChange() {
   passwordField.style.display = type === 'password' ? 'block' : 'none';
 }
 
-function sendPhoto(input) {
-  const file = input.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      const img = document.createElement('img');
-      img.src = e.target.result;
-      img.style.maxWidth = '200px';
-      document.getElementById('messages').appendChild(img);
-    };
-    reader.readAsDataURL(file);
-  }
-}
+document.getElementById('chatType').addEventListener('change', handleChatTypeChange);
 
-function sendVideo(input) {
-  const file = input.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      const video = document.createElement('video');
-      video.src = e.target.result;
-      video.controls = true;
-      video.style.maxWidth = '300px';
-      document.getElementById('messages').appendChild(video);
-    };
-    reader.readAsDataURL(file);
-  }
-}
-
-// Show/hide password input based on chat type
-document.getElementById('chatType').addEventListener('change', function () {
-  const passwordField = document.getElementById('chatPassword');
-  passwordField.style.display = this.value === 'password' ? 'inline' : 'none';
-});
-
-// Enable Enter to send message
 document.addEventListener("DOMContentLoaded", function () {
   const input = document.getElementById("messageInput");
   input.addEventListener("keydown", function (event) {
